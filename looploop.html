@@ -1,0 +1,1100 @@
+<!doctype html>
+<!--
+  looploop - practice over a track: loop a section, change key and speed while listening.
+  Copyright (C) 2026 Leonardo Gon
+
+  This program is free software: you can redistribute it and/or modify it under the terms of the
+  GNU General Public License as published by the Free Software Foundation, version 3.
+  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY;
+  without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+  See the GNU General Public License for more details: https://www.gnu.org/licenses/gpl-3.0.html
+
+  This file includes SoundTouchJS v0.1.30 (https://github.com/cutterbl/SoundTouchJS), unmodified,
+  licensed under LGPL 2.1 or later; its own copyright notice is kept in the "engine" block below.
+-->
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>looploop</title>
+<style>
+  :root {
+    --bg: #16181d; --panel: #1f232a; --line: #2d323b; --text: #e6e8eb; --muted: #9aa1ab;
+    --start: #3ccf7a; --end: #ff5a5a; --head: #ffd24a; --accent: #3d7bd9;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
+  #info { color: var(--muted); }
+  main { padding: 16px; max-width: 860px; }
+  button { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
+    padding: 7px 12px; font: inherit; cursor: pointer; }
+  button:hover:not(:disabled) { border-color: var(--muted); }
+  button:disabled { opacity: .4; cursor: default; }
+  button * { pointer-events: none; }   /* il clic arriva sempre al bottone, anche sopra la scritta */
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 96px; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
+  .group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 6px; padding: 8px 10px; }
+  .group > .name { color: var(--muted); min-width: 64px; }
+  .group label { color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
+  .pair { display: inline-flex; align-items: center; gap: 8px; }
+  input[type=text] { width: 96px; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 4px; padding: 5px 6px; font: 14px ui-monospace, Menlo, monospace; }
+  input[type=range] { accent-color: var(--accent); }
+  #pos { width: 100%; margin: 0; }
+  #speed, #volume { width: 240px; max-width: 100%; }
+  .mono { font-family: ui-monospace, Menlo, monospace; }
+  #time { font-size: 16px; }
+  #semisLabel { min-width: 112px; text-align: center; }
+  #speedLabel, #volumeLabel { min-width: 48px; text-align: right; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  #status { color: var(--muted); min-height: 20px; }
+  #status.err { color: var(--end); }
+  body.dragover main { outline: 2px dashed var(--accent); outline-offset: -6px; }
+  button, select, input { touch-action: manipulation; }   /* niente zoom con doppio tocco */
+  @media (max-width: 640px) {
+    header { gap: 8px 10px; padding: 10px 12px; }
+    #info { flex-basis: 100%; font-size: 13px; }
+    main { padding: 12px; }
+    .row > .group { flex: 1 1 100%; }
+    button { padding: 11px 14px; min-height: 44px; }
+    input[type=text] { padding: 9px 6px; font-size: 16px; width: 124px; }
+    .pair { flex: 1 1 100%; }
+    .pair label { min-width: 44px; }   /* 16 px: l'iPhone non ingrandisce la pagina */
+    input[type=checkbox] { width: 22px; height: 22px; }
+    #speed, #volume { flex: 1 1 0; width: 0; min-width: 0; }
+    #pos { height: 36px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>looploop <span style="font-size:12px;color:var(--muted);font-weight:normal">v0.3</span></h1>
+  <button id="openBtn">Apri brano…</button>
+  <input id="fileInput" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.aif,.aiff,.flac" hidden>
+  <span id="info"></span>
+</header>
+<main>
+  <div class="row">
+    <button id="playBtn" class="primary" disabled>Play</button>
+    <button id="toLoopBtn" disabled>Inizio loop</button>
+    <span id="time" class="mono">00:00.000 / 00:00.000</span>
+  </div>
+  <input id="pos" type="range" min="0" max="1" step="0.01" value="0" disabled aria-label="Posizione nel brano">
+
+  <div class="row">
+    <div class="group">
+      <span class="name">Loop</span>
+      <label><input id="loopOn" type="checkbox" checked disabled> attivo</label>
+      <span class="pair"><span class="dot" style="background:var(--start)"></span><label for="loopStart">Inizio</label>
+        <input id="loopStart" type="text" inputmode="decimal" disabled>
+        <button id="setStartBtn" disabled>Qui</button></span>
+      <span class="pair"><span class="dot" style="background:var(--end)"></span><label for="loopEnd">Fine</label>
+        <input id="loopEnd" type="text" inputmode="decimal" disabled>
+        <button id="setEndBtn" disabled>Qui</button></span>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="group">
+      <span class="name">Tono</span>
+      <button id="semisDown" disabled aria-label="Un semitono giù">−</button>
+      <span id="semisLabel" class="mono">0 semitoni</span>
+      <button id="semisUp" disabled aria-label="Un semitono su">+</button>
+      <button id="semisReset" disabled>Originale</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="group">
+      <span class="name">Velocità</span>
+      <input id="speed" type="range" min="50" max="100" step="5" value="100" disabled aria-label="Velocità">
+      <span id="speedLabel" class="mono">100%</span>
+      <button id="speedReset" disabled>100%</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="group">
+      <span class="name">Volume</span>
+      <input id="volume" type="range" min="0" max="100" step="1" value="100" disabled aria-label="Volume">
+      <span id="volumeLabel" class="mono">100%</span>
+    </div>
+  </div>
+
+  <div id="status">Apri un brano, oppure trascinalo qui.</div>
+</main>
+
+<!-- Motore audio: libreria SoundTouchJS (LGPL 2.1, testo non modificato) seguita dal motore di looploop.
+     Sta in un blocco di testo perché viene caricato dentro un AudioWorklet. -->
+<script type="text/plain" id="engine">
+/*
+ * SoundTouch JS v0.1.30 audio processing library
+ * Copyright (c) Olli Parviainen
+ * Copyright (c) Ryan Berdeen
+ * Copyright (c) Jakub Fiala
+ * Copyright (c) Steve 'Cutter' Blades
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+ */
+
+class FifoSampleBuffer {
+  constructor() {
+    this._vector = new Float32Array();
+    this._position = 0;
+    this._frameCount = 0;
+  }
+  get vector() {
+    return this._vector;
+  }
+  get position() {
+    return this._position;
+  }
+  get startIndex() {
+    return this._position * 2;
+  }
+  get frameCount() {
+    return this._frameCount;
+  }
+  get endIndex() {
+    return (this._position + this._frameCount) * 2;
+  }
+  clear() {
+    this.receive(this._frameCount);
+    this.rewind();
+  }
+  put(numFrames) {
+    this._frameCount += numFrames;
+  }
+  putSamples(samples, position, numFrames = 0) {
+    position = position || 0;
+    const sourceOffset = position * 2;
+    if (!(numFrames >= 0)) {
+      numFrames = (samples.length - sourceOffset) / 2;
+    }
+    const numSamples = numFrames * 2;
+    this.ensureCapacity(numFrames + this._frameCount);
+    const destOffset = this.endIndex;
+    this.vector.set(samples.subarray(sourceOffset, sourceOffset + numSamples), destOffset);
+    this._frameCount += numFrames;
+  }
+  putBuffer(buffer, position, numFrames = 0) {
+    position = position || 0;
+    if (!(numFrames >= 0)) {
+      numFrames = buffer.frameCount - position;
+    }
+    this.putSamples(buffer.vector, buffer.position + position, numFrames);
+  }
+  receive(numFrames) {
+    if (!(numFrames >= 0) || numFrames > this._frameCount) {
+      numFrames = this.frameCount;
+    }
+    this._frameCount -= numFrames;
+    this._position += numFrames;
+  }
+  receiveSamples(output, numFrames = 0) {
+    const numSamples = numFrames * 2;
+    const sourceOffset = this.startIndex;
+    output.set(this._vector.subarray(sourceOffset, sourceOffset + numSamples));
+    this.receive(numFrames);
+  }
+  extract(output, position = 0, numFrames = 0) {
+    const sourceOffset = this.startIndex + position * 2;
+    const numSamples = numFrames * 2;
+    output.set(this._vector.subarray(sourceOffset, sourceOffset + numSamples));
+  }
+  ensureCapacity(numFrames = 0) {
+    const minLength = parseInt(numFrames * 2);
+    if (this._vector.length < minLength) {
+      const newVector = new Float32Array(minLength);
+      newVector.set(this._vector.subarray(this.startIndex, this.endIndex));
+      this._vector = newVector;
+      this._position = 0;
+    } else {
+      this.rewind();
+    }
+  }
+  ensureAdditionalCapacity(numFrames = 0) {
+    this.ensureCapacity(this._frameCount + numFrames);
+  }
+  rewind() {
+    if (this._position > 0) {
+      this._vector.set(this._vector.subarray(this.startIndex, this.endIndex));
+      this._position = 0;
+    }
+  }
+}
+
+class AbstractFifoSamplePipe {
+  constructor(createBuffers) {
+    if (createBuffers) {
+      this._inputBuffer = new FifoSampleBuffer();
+      this._outputBuffer = new FifoSampleBuffer();
+    } else {
+      this._inputBuffer = this._outputBuffer = null;
+    }
+  }
+  get inputBuffer() {
+    return this._inputBuffer;
+  }
+  set inputBuffer(inputBuffer) {
+    this._inputBuffer = inputBuffer;
+  }
+  get outputBuffer() {
+    return this._outputBuffer;
+  }
+  set outputBuffer(outputBuffer) {
+    this._outputBuffer = outputBuffer;
+  }
+  clear() {
+    this._inputBuffer.clear();
+    this._outputBuffer.clear();
+  }
+}
+
+class RateTransposer extends AbstractFifoSamplePipe {
+  constructor(createBuffers) {
+    super(createBuffers);
+    this.reset();
+    this._rate = 1;
+  }
+  set rate(rate) {
+    this._rate = rate;
+  }
+  reset() {
+    this.slopeCount = 0;
+    this.prevSampleL = 0;
+    this.prevSampleR = 0;
+  }
+  clone() {
+    const result = new RateTransposer();
+    result.rate = this._rate;
+    return result;
+  }
+  process() {
+    const numFrames = this._inputBuffer.frameCount;
+    this._outputBuffer.ensureAdditionalCapacity(numFrames / this._rate + 1);
+    const numFramesOutput = this.transpose(numFrames);
+    this._inputBuffer.receive();
+    this._outputBuffer.put(numFramesOutput);
+  }
+  transpose(numFrames = 0) {
+    if (numFrames === 0) {
+      return 0;
+    }
+    const src = this._inputBuffer.vector;
+    const srcOffset = this._inputBuffer.startIndex;
+    const dest = this._outputBuffer.vector;
+    const destOffset = this._outputBuffer.endIndex;
+    let used = 0;
+    let i = 0;
+    while (this.slopeCount < 1.0) {
+      dest[destOffset + 2 * i] = (1.0 - this.slopeCount) * this.prevSampleL + this.slopeCount * src[srcOffset];
+      dest[destOffset + 2 * i + 1] = (1.0 - this.slopeCount) * this.prevSampleR + this.slopeCount * src[srcOffset + 1];
+      i = i + 1;
+      this.slopeCount += this._rate;
+    }
+    this.slopeCount -= 1.0;
+    if (numFrames !== 1) {
+      out: while (true) {
+        while (this.slopeCount > 1.0) {
+          this.slopeCount -= 1.0;
+          used = used + 1;
+          if (used >= numFrames - 1) {
+            break out;
+          }
+        }
+        const srcIndex = srcOffset + 2 * used;
+        dest[destOffset + 2 * i] = (1.0 - this.slopeCount) * src[srcIndex] + this.slopeCount * src[srcIndex + 2];
+        dest[destOffset + 2 * i + 1] = (1.0 - this.slopeCount) * src[srcIndex + 1] + this.slopeCount * src[srcIndex + 3];
+        i = i + 1;
+        this.slopeCount += this._rate;
+      }
+    }
+    this.prevSampleL = src[srcOffset + 2 * numFrames - 2];
+    this.prevSampleR = src[srcOffset + 2 * numFrames - 1];
+    return i;
+  }
+}
+
+class FilterSupport {
+  constructor(pipe) {
+    this._pipe = pipe;
+  }
+  get pipe() {
+    return this._pipe;
+  }
+  get inputBuffer() {
+    return this._pipe.inputBuffer;
+  }
+  get outputBuffer() {
+    return this._pipe.outputBuffer;
+  }
+  fillInputBuffer() {
+    throw new Error('fillInputBuffer() not overridden');
+  }
+  fillOutputBuffer(numFrames = 0) {
+    while (this.outputBuffer.frameCount < numFrames) {
+      const numInputFrames = 8192 * 2 - this.inputBuffer.frameCount;
+      this.fillInputBuffer(numInputFrames);
+      if (this.inputBuffer.frameCount < 8192 * 2) {
+        break;
+      }
+      this._pipe.process();
+    }
+  }
+  clear() {
+    this._pipe.clear();
+  }
+}
+
+const noop = function () {
+  return;
+};
+
+class SimpleFilter extends FilterSupport {
+  constructor(sourceSound, pipe, callback = noop) {
+    super(pipe);
+    this.callback = callback;
+    this.sourceSound = sourceSound;
+    this.historyBufferSize = 22050;
+    this._sourcePosition = 0;
+    this.outputBufferPosition = 0;
+    this._position = 0;
+  }
+  get position() {
+    return this._position;
+  }
+  set position(position) {
+    if (position > this._position) {
+      throw new RangeError('New position may not be greater than current position');
+    }
+    const newOutputBufferPosition = this.outputBufferPosition - (this._position - position);
+    if (newOutputBufferPosition < 0) {
+      throw new RangeError('New position falls outside of history buffer');
+    }
+    this.outputBufferPosition = newOutputBufferPosition;
+    this._position = position;
+  }
+  get sourcePosition() {
+    return this._sourcePosition;
+  }
+  set sourcePosition(sourcePosition) {
+    this.clear();
+    this._sourcePosition = sourcePosition;
+  }
+  onEnd() {
+    this.callback();
+  }
+  fillInputBuffer(numFrames = 0) {
+    const samples = new Float32Array(numFrames * 2);
+    const numFramesExtracted = this.sourceSound.extract(samples, numFrames, this._sourcePosition);
+    this._sourcePosition += numFramesExtracted;
+    this.inputBuffer.putSamples(samples, 0, numFramesExtracted);
+  }
+  extract(target, numFrames = 0) {
+    this.fillOutputBuffer(this.outputBufferPosition + numFrames);
+    const numFramesExtracted = Math.min(numFrames, this.outputBuffer.frameCount - this.outputBufferPosition);
+    this.outputBuffer.extract(target, this.outputBufferPosition, numFramesExtracted);
+    const currentFrames = this.outputBufferPosition + numFramesExtracted;
+    this.outputBufferPosition = Math.min(this.historyBufferSize, currentFrames);
+    this.outputBuffer.receive(Math.max(currentFrames - this.historyBufferSize, 0));
+    this._position += numFramesExtracted;
+    return numFramesExtracted;
+  }
+  handleSampleData(event) {
+    this.extract(event.data, 4096);
+  }
+  clear() {
+    super.clear();
+    this.outputBufferPosition = 0;
+  }
+}
+
+const USE_AUTO_SEQUENCE_LEN = 0;
+const DEFAULT_SEQUENCE_MS = USE_AUTO_SEQUENCE_LEN;
+const USE_AUTO_SEEKWINDOW_LEN = 0;
+const DEFAULT_SEEKWINDOW_MS = USE_AUTO_SEEKWINDOW_LEN;
+const DEFAULT_OVERLAP_MS = 8;
+const _SCAN_OFFSETS = [[124, 186, 248, 310, 372, 434, 496, 558, 620, 682, 744, 806, 868, 930, 992, 1054, 1116, 1178, 1240, 1302, 1364, 1426, 1488, 0], [-100, -75, -50, -25, 25, 50, 75, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [-20, -15, -10, -5, 5, 10, 15, 20, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [-4, -3, -2, -1, 1, 2, 3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]];
+const AUTOSEQ_TEMPO_LOW = 0.5;
+const AUTOSEQ_TEMPO_TOP = 2.0;
+const AUTOSEQ_AT_MIN = 125.0;
+const AUTOSEQ_AT_MAX = 50.0;
+const AUTOSEQ_K = (AUTOSEQ_AT_MAX - AUTOSEQ_AT_MIN) / (AUTOSEQ_TEMPO_TOP - AUTOSEQ_TEMPO_LOW);
+const AUTOSEQ_C = AUTOSEQ_AT_MIN - AUTOSEQ_K * AUTOSEQ_TEMPO_LOW;
+const AUTOSEEK_AT_MIN = 25.0;
+const AUTOSEEK_AT_MAX = 15.0;
+const AUTOSEEK_K = (AUTOSEEK_AT_MAX - AUTOSEEK_AT_MIN) / (AUTOSEQ_TEMPO_TOP - AUTOSEQ_TEMPO_LOW);
+const AUTOSEEK_C = AUTOSEEK_AT_MIN - AUTOSEEK_K * AUTOSEQ_TEMPO_LOW;
+class Stretch extends AbstractFifoSamplePipe {
+  constructor(createBuffers) {
+    super(createBuffers);
+    this._quickSeek = true;
+    this.midBufferDirty = false;
+    this.midBuffer = null;
+    this.overlapLength = 0;
+    this.autoSeqSetting = true;
+    this.autoSeekSetting = true;
+    this._tempo = 1;
+    this.setParameters(44100, DEFAULT_SEQUENCE_MS, DEFAULT_SEEKWINDOW_MS, DEFAULT_OVERLAP_MS);
+  }
+  clear() {
+    super.clear();
+    this.clearMidBuffer();
+  }
+  clearMidBuffer() {
+    if (this.midBufferDirty) {
+      this.midBufferDirty = false;
+      this.midBuffer = null;
+    }
+  }
+  setParameters(sampleRate, sequenceMs, seekWindowMs, overlapMs) {
+    if (sampleRate > 0) {
+      this.sampleRate = sampleRate;
+    }
+    if (overlapMs > 0) {
+      this.overlapMs = overlapMs;
+    }
+    if (sequenceMs > 0) {
+      this.sequenceMs = sequenceMs;
+      this.autoSeqSetting = false;
+    } else {
+      this.autoSeqSetting = true;
+    }
+    if (seekWindowMs > 0) {
+      this.seekWindowMs = seekWindowMs;
+      this.autoSeekSetting = false;
+    } else {
+      this.autoSeekSetting = true;
+    }
+    this.calculateSequenceParameters();
+    this.calculateOverlapLength(this.overlapMs);
+    this.tempo = this._tempo;
+  }
+  set tempo(newTempo) {
+    let intskip;
+    this._tempo = newTempo;
+    this.calculateSequenceParameters();
+    this.nominalSkip = this._tempo * (this.seekWindowLength - this.overlapLength);
+    this.skipFract = 0;
+    intskip = Math.floor(this.nominalSkip + 0.5);
+    this.sampleReq = Math.max(intskip + this.overlapLength, this.seekWindowLength) + this.seekLength;
+  }
+  get tempo() {
+    return this._tempo;
+  }
+  get inputChunkSize() {
+    return this.sampleReq;
+  }
+  get outputChunkSize() {
+    return this.overlapLength + Math.max(0, this.seekWindowLength - 2 * this.overlapLength);
+  }
+  calculateOverlapLength(overlapInMsec = 0) {
+    let newOvl;
+    newOvl = this.sampleRate * overlapInMsec / 1000;
+    newOvl = newOvl < 16 ? 16 : newOvl;
+    newOvl -= newOvl % 8;
+    this.overlapLength = newOvl;
+    this.refMidBuffer = new Float32Array(this.overlapLength * 2);
+    this.midBuffer = new Float32Array(this.overlapLength * 2);
+  }
+  checkLimits(x, mi, ma) {
+    return x < mi ? mi : x > ma ? ma : x;
+  }
+  calculateSequenceParameters() {
+    let seq;
+    let seek;
+    if (this.autoSeqSetting) {
+      seq = AUTOSEQ_C + AUTOSEQ_K * this._tempo;
+      seq = this.checkLimits(seq, AUTOSEQ_AT_MAX, AUTOSEQ_AT_MIN);
+      this.sequenceMs = Math.floor(seq + 0.5);
+    }
+    if (this.autoSeekSetting) {
+      seek = AUTOSEEK_C + AUTOSEEK_K * this._tempo;
+      seek = this.checkLimits(seek, AUTOSEEK_AT_MAX, AUTOSEEK_AT_MIN);
+      this.seekWindowMs = Math.floor(seek + 0.5);
+    }
+    this.seekWindowLength = Math.floor(this.sampleRate * this.sequenceMs / 1000);
+    this.seekLength = Math.floor(this.sampleRate * this.seekWindowMs / 1000);
+  }
+  set quickSeek(enable) {
+    this._quickSeek = enable;
+  }
+  clone() {
+    const result = new Stretch();
+    result.tempo = this._tempo;
+    result.setParameters(this.sampleRate, this.sequenceMs, this.seekWindowMs, this.overlapMs);
+    return result;
+  }
+  seekBestOverlapPosition() {
+    return this._quickSeek ? this.seekBestOverlapPositionStereoQuick() : this.seekBestOverlapPositionStereo();
+  }
+  seekBestOverlapPositionStereo() {
+    let bestOffset;
+    let bestCorrelation;
+    let correlation;
+    let i = 0;
+    this.preCalculateCorrelationReferenceStereo();
+    bestOffset = 0;
+    bestCorrelation = Number.MIN_VALUE;
+    for (; i < this.seekLength; i = i + 1) {
+      correlation = this.calculateCrossCorrelationStereo(2 * i, this.refMidBuffer);
+      if (correlation > bestCorrelation) {
+        bestCorrelation = correlation;
+        bestOffset = i;
+      }
+    }
+    return bestOffset;
+  }
+  seekBestOverlapPositionStereoQuick() {
+    let bestOffset;
+    let bestCorrelation;
+    let correlation;
+    let scanCount = 0;
+    let correlationOffset;
+    let tempOffset;
+    this.preCalculateCorrelationReferenceStereo();
+    bestCorrelation = Number.MIN_VALUE;
+    bestOffset = 0;
+    correlationOffset = 0;
+    tempOffset = 0;
+    for (; scanCount < 4; scanCount = scanCount + 1) {
+      let j = 0;
+      while (_SCAN_OFFSETS[scanCount][j]) {
+        tempOffset = correlationOffset + _SCAN_OFFSETS[scanCount][j];
+        if (tempOffset >= this.seekLength) {
+          break;
+        }
+        correlation = this.calculateCrossCorrelationStereo(2 * tempOffset, this.refMidBuffer);
+        if (correlation > bestCorrelation) {
+          bestCorrelation = correlation;
+          bestOffset = tempOffset;
+        }
+        j = j + 1;
+      }
+      correlationOffset = bestOffset;
+    }
+    return bestOffset;
+  }
+  preCalculateCorrelationReferenceStereo() {
+    let i = 0;
+    let context;
+    let temp;
+    for (; i < this.overlapLength; i = i + 1) {
+      temp = i * (this.overlapLength - i);
+      context = i * 2;
+      this.refMidBuffer[context] = this.midBuffer[context] * temp;
+      this.refMidBuffer[context + 1] = this.midBuffer[context + 1] * temp;
+    }
+  }
+  calculateCrossCorrelationStereo(mixingPosition, compare) {
+    const mixing = this._inputBuffer.vector;
+    mixingPosition += this._inputBuffer.startIndex;
+    let correlation = 0;
+    let i = 2;
+    const calcLength = 2 * this.overlapLength;
+    let mixingOffset;
+    for (; i < calcLength; i = i + 2) {
+      mixingOffset = i + mixingPosition;
+      correlation += mixing[mixingOffset] * compare[i] + mixing[mixingOffset + 1] * compare[i + 1];
+    }
+    return correlation;
+  }
+  overlap(overlapPosition) {
+    this.overlapStereo(2 * overlapPosition);
+  }
+  overlapStereo(inputPosition) {
+    const input = this._inputBuffer.vector;
+    inputPosition += this._inputBuffer.startIndex;
+    const output = this._outputBuffer.vector;
+    const outputPosition = this._outputBuffer.endIndex;
+    let i = 0;
+    let context;
+    let tempFrame;
+    const frameScale = 1 / this.overlapLength;
+    let fi;
+    let inputOffset;
+    let outputOffset;
+    for (; i < this.overlapLength; i = i + 1) {
+      tempFrame = (this.overlapLength - i) * frameScale;
+      fi = i * frameScale;
+      context = 2 * i;
+      inputOffset = context + inputPosition;
+      outputOffset = context + outputPosition;
+      output[outputOffset + 0] = input[inputOffset + 0] * fi + this.midBuffer[context + 0] * tempFrame;
+      output[outputOffset + 1] = input[inputOffset + 1] * fi + this.midBuffer[context + 1] * tempFrame;
+    }
+  }
+  process() {
+    let offset;
+    let temp;
+    let overlapSkip;
+    if (this.midBuffer === null) {
+      if (this._inputBuffer.frameCount < this.overlapLength) {
+        return;
+      }
+      this.midBuffer = new Float32Array(this.overlapLength * 2);
+      this._inputBuffer.receiveSamples(this.midBuffer, this.overlapLength);
+    }
+    while (this._inputBuffer.frameCount >= this.sampleReq) {
+      offset = this.seekBestOverlapPosition();
+      this._outputBuffer.ensureAdditionalCapacity(this.overlapLength);
+      this.overlap(Math.floor(offset));
+      this._outputBuffer.put(this.overlapLength);
+      temp = this.seekWindowLength - 2 * this.overlapLength;
+      if (temp > 0) {
+        this._outputBuffer.putBuffer(this._inputBuffer, offset + this.overlapLength, temp);
+      }
+      const start = this._inputBuffer.startIndex + 2 * (offset + this.seekWindowLength - this.overlapLength);
+      this.midBuffer.set(this._inputBuffer.vector.subarray(start, start + 2 * this.overlapLength));
+      this.skipFract += this.nominalSkip;
+      overlapSkip = Math.floor(this.skipFract);
+      this.skipFract -= overlapSkip;
+      this._inputBuffer.receive(overlapSkip);
+    }
+  }
+}
+
+const testFloatEqual = function (a, b) {
+  return (a > b ? a - b : b - a) > 1e-10;
+};
+
+class SoundTouch {
+  constructor() {
+    this.transposer = new RateTransposer(false);
+    this.stretch = new Stretch(false);
+    this._inputBuffer = new FifoSampleBuffer();
+    this._intermediateBuffer = new FifoSampleBuffer();
+    this._outputBuffer = new FifoSampleBuffer();
+    this._rate = 0;
+    this._tempo = 0;
+    this.virtualPitch = 1.0;
+    this.virtualRate = 1.0;
+    this.virtualTempo = 1.0;
+    this.calculateEffectiveRateAndTempo();
+  }
+  clear() {
+    this.transposer.clear();
+    this.stretch.clear();
+  }
+  clone() {
+    const result = new SoundTouch();
+    result.rate = this.rate;
+    result.tempo = this.tempo;
+    return result;
+  }
+  get rate() {
+    return this._rate;
+  }
+  set rate(rate) {
+    this.virtualRate = rate;
+    this.calculateEffectiveRateAndTempo();
+  }
+  set rateChange(rateChange) {
+    this._rate = 1.0 + 0.01 * rateChange;
+  }
+  get tempo() {
+    return this._tempo;
+  }
+  set tempo(tempo) {
+    this.virtualTempo = tempo;
+    this.calculateEffectiveRateAndTempo();
+  }
+  set tempoChange(tempoChange) {
+    this.tempo = 1.0 + 0.01 * tempoChange;
+  }
+  set pitch(pitch) {
+    this.virtualPitch = pitch;
+    this.calculateEffectiveRateAndTempo();
+  }
+  set pitchOctaves(pitchOctaves) {
+    this.pitch = Math.exp(0.69314718056 * pitchOctaves);
+    this.calculateEffectiveRateAndTempo();
+  }
+  set pitchSemitones(pitchSemitones) {
+    this.pitchOctaves = pitchSemitones / 12.0;
+  }
+  get inputBuffer() {
+    return this._inputBuffer;
+  }
+  get outputBuffer() {
+    return this._outputBuffer;
+  }
+  calculateEffectiveRateAndTempo() {
+    const previousTempo = this._tempo;
+    const previousRate = this._rate;
+    this._tempo = this.virtualTempo / this.virtualPitch;
+    this._rate = this.virtualRate * this.virtualPitch;
+    if (testFloatEqual(this._tempo, previousTempo)) {
+      this.stretch.tempo = this._tempo;
+    }
+    if (testFloatEqual(this._rate, previousRate)) {
+      this.transposer.rate = this._rate;
+    }
+    if (this._rate > 1.0) {
+      if (this._outputBuffer != this.transposer.outputBuffer) {
+        this.stretch.inputBuffer = this._inputBuffer;
+        this.stretch.outputBuffer = this._intermediateBuffer;
+        this.transposer.inputBuffer = this._intermediateBuffer;
+        this.transposer.outputBuffer = this._outputBuffer;
+      }
+    } else {
+      if (this._outputBuffer != this.stretch.outputBuffer) {
+        this.transposer.inputBuffer = this._inputBuffer;
+        this.transposer.outputBuffer = this._intermediateBuffer;
+        this.stretch.inputBuffer = this._intermediateBuffer;
+        this.stretch.outputBuffer = this._outputBuffer;
+      }
+    }
+  }
+  process() {
+    if (this._rate > 1.0) {
+      this.stretch.process();
+      this.transposer.process();
+    } else {
+      this.transposer.process();
+      this.stretch.process();
+    }
+  }
+}
+
+
+/* ===== looploop: motore =====
+ * Legge il brano decodificato, gestisce il loop e passa i campioni a SoundTouch.
+ * Gira dentro l'AudioWorklet; se il browser non lo permette, la stessa classe gira nella pagina.
+ * Posizioni e lunghezze qui dentro sono in campioni (frame), non in secondi.
+ */
+const LL_CHUNK = 1024;
+class LoopEngine {
+  constructor(sr, post) {
+    this.sr = sr; this.post = post;
+    this.L = null; this.R = null; this.len = 0;
+    this.pos = 0;                 // prossimo campione da leggere dal brano
+    this.playing = false;
+    this.loopOn = true; this.ls = 0; this.le = 0; this.wrapped = false;
+    this.fade = Math.round(sr * 0.003);   // 3 ms di sfumatura alla giunzione del loop, contro il clic
+    this.tail = 0;
+    this.st = new SoundTouch();
+    this.st.stretch.setParameters(sr, 0, 0, 8);
+    this.chunk = new Float32Array(LL_CHUNK * 2);
+    this.out = new Float32Array(0);
+    this.sinceReport = 0;
+  }
+  loopActive() { return this.loopOn && this.le - this.ls >= this.fade * 4; }
+  resetSt() {
+    const st = this.st;
+    st.clear();
+    st.stretch.midBuffer = null; st.stretch.skipFract = 0;
+    st.transposer.reset();
+  }
+  // Posizione che si sta sentendo: quella di lettura meno ciò che è ancora in coda dentro SoundTouch
+  shown() {
+    const st = this.st;
+    const mid = st._intermediateBuffer.frameCount;
+    let lat = st._inputBuffer.frameCount + st._outputBuffer.frameCount * st._tempo * st._rate;
+    lat += st._rate > 1 ? mid * st._tempo : mid * st._rate;
+    let p = this.pos - lat;
+    if (this.loopActive() && this.wrapped) { const n = this.le - this.ls; while (p < this.ls) p += n; }
+    return Math.min(this.len, Math.max(0, p));
+  }
+  report() { this.sinceReport = 0; this.post({ type: "pos", pos: this.shown(), playing: this.playing }); }
+  msg(d) {
+    switch (d.type) {
+      case "load":
+        this.L = d.L; this.R = d.R || d.L; this.len = d.L.length;
+        this.pos = 0; this.playing = false; this.ls = 0; this.le = this.len; this.wrapped = false; this.tail = 0;
+        this.resetSt();
+        break;
+      case "play":
+        if (!this.L) break;
+        if (this.pos >= this.len) { this.pos = this.loopActive() ? this.ls : 0; this.resetSt(); }
+        this.tail = 0; this.playing = true;
+        break;
+      case "pause": this.playing = false; break;
+      case "seek":
+        this.resetSt();
+        this.pos = Math.min(this.len, Math.max(0, Math.round(d.pos)));
+        this.wrapped = false; this.tail = 0;
+        break;
+      case "loop":
+        this.loopOn = !!d.on; this.ls = Math.max(0, Math.round(d.ls)); this.le = Math.min(this.len, Math.round(d.le));
+        this.wrapped = false;
+        break;
+      case "semis": {
+        const p = this.shown();        // si riparte da dove si stava ascoltando, senza salti
+        this.resetSt();
+        this.st.pitchSemitones = d.value;
+        this.pos = Math.round(p); this.wrapped = false;
+        break;
+      }
+      case "speed": this.st.tempo = d.value; break;
+    }
+    this.report();
+  }
+  // Mette in this.chunk il prossimo pezzo di brano; restituisce quanti frame, 0 a fine brano
+  feed() {
+    const loop = this.loopActive();
+    if (loop && this.pos >= this.le) { this.pos = this.ls; this.wrapped = true; }
+    const end = loop ? this.le : this.len;
+    if (this.pos >= end) return 0;
+    const p = this.pos, n = Math.min(LL_CHUNK, end - p);
+    const L = this.L, R = this.R, c = this.chunk;
+    for (let i = 0; i < n; i++) { c[2 * i] = L[p + i]; c[2 * i + 1] = R[p + i]; }
+    if (loop) {
+      const f = this.fade, ls = this.ls, le = this.le;
+      if (p + n > le - f) {
+        for (let i = Math.max(0, le - f - p); i < n; i++) { const g = (le - (p + i)) / f; c[2 * i] *= g; c[2 * i + 1] *= g; }
+      }
+      if (this.wrapped && p < ls + f && p >= ls) {
+        for (let i = 0; i < n && p + i < ls + f; i++) { const g = (p + i - ls) / f; c[2 * i] *= g; c[2 * i + 1] *= g; }
+      }
+    }
+    this.pos = p + n;
+    return n;
+  }
+  render(outL, outR) {
+    const n = outL.length;
+    if (!this.playing || !this.L) { outL.fill(0); if (outR !== outL) outR.fill(0); return; }
+    const st = this.st, ob = st.outputBuffer;
+    let guard = 0, finished = false;
+    while (ob.frameCount < n && guard++ < 200) {
+      let k = this.feed();
+      if (k === 0) {                    // fine brano: un po' di silenzio per far uscire la coda
+        if (this.tail >= this.sr * 0.4) { finished = true; break; }
+        this.chunk.fill(0); k = LL_CHUNK; this.tail += k;
+      }
+      st.inputBuffer.putSamples(this.chunk, 0, k);
+      st.process();
+    }
+    const got = Math.min(n, ob.frameCount);
+    if (this.out.length < n * 2) this.out = new Float32Array(n * 2);
+    const o = this.out;
+    if (got > 0) ob.receiveSamples(o, got);
+    for (let i = 0; i < got; i++) { outL[i] = o[2 * i]; outR[i] = o[2 * i + 1]; }
+    for (let i = got; i < n; i++) { outL[i] = 0; outR[i] = 0; }
+    if (finished) { this.playing = false; this.pos = this.len; this.resetSt(); this.report(); return; }
+    this.sinceReport += n;
+    if (this.sinceReport >= this.sr * 0.03) this.report();
+  }
+}
+if (typeof registerProcessor === "function") {
+  registerProcessor("looploop", class extends AudioWorkletProcessor {
+    constructor() {
+      super();
+      this.eng = new LoopEngine(sampleRate, m => this.port.postMessage(m));
+      this.port.onmessage = e => this.eng.msg(e.data);
+    }
+    process(inputs, outputs) {
+      const o = outputs[0];
+      if (o && o[0]) this.eng.render(o[0], o[1] || o[0]);
+      return true;
+    }
+  });
+}
+
+</script>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+const S = { ctx: null, node: null, mode: "", sr: 0, T: 0, pos: 0, playing: false,
+            loopOn: true, ls: 0, le: 0, semis: 0, speed: 1, volume: 1, gain: null, name: "" };
+
+function fmt(t) {
+  t = Math.max(0, t);
+  const m = Math.floor(t / 60), s = t - m * 60;
+  return String(m).padStart(2, "0") + ":" + s.toFixed(3).padStart(6, "0");
+}
+function parseTime(str) {
+  str = str.trim().replace(",", ".");
+  const p = str.split(":");
+  let t = NaN;
+  if (p.length === 1) t = parseFloat(p[0]);
+  else if (p.length === 2) t = parseInt(p[0], 10) * 60 + parseFloat(p[1]);
+  else if (p.length === 3) t = parseInt(p[0], 10) * 3600 + parseInt(p[1], 10) * 60 + parseFloat(p[2]);
+  return isFinite(t) ? t : null;
+}
+function status(msg, err) { const el = $("status"); el.textContent = msg; el.classList.toggle("err", !!err); }
+// Safari annulla il clic se la scritta di un bottone viene riscritta mentre lo si preme: si scrive solo se cambia
+function setText(el, txt) { if (el.textContent !== txt) el.textContent = txt; }
+
+/* ----- motore ----- */
+// iPhone: senza questo l'audio della pagina resta muto se l'interruttore silenzioso è attivo
+try { if (navigator.audioSession) navigator.audioSession.type = "playback"; } catch (_) {}
+
+let send = () => {};
+function onEngineMsg(m) {
+  if (m.type !== "pos") return;
+  S.pos = m.pos / S.sr;
+  S.playing = m.playing;
+  updateUI();
+}
+async function ensureEngine() {
+  if (S.node) return;
+  const code = $("engine").textContent;
+  S.sr = S.ctx.sampleRate;
+  try {
+    if (!S.ctx.audioWorklet || typeof AudioWorkletNode === "undefined") throw new Error("AudioWorklet non disponibile");
+    // Pagina aperta da disco (file://): l'indirizzo blob viene rifiutato, quello data: no. Si provano entrambi.
+    try {
+      await S.ctx.audioWorklet.addModule("data:text/javascript;charset=utf-8," + encodeURIComponent(code));
+    } catch (_) {
+      await S.ctx.audioWorklet.addModule(URL.createObjectURL(new Blob([code], { type: "text/javascript" })));
+    }
+    const node = new AudioWorkletNode(S.ctx, "looploop", { numberOfInputs: 0, numberOfOutputs: 1, outputChannelCount: [2] });
+    node.port.onmessage = e => onEngineMsg(e.data);
+    node.onprocessorerror = () => status("Errore nel motore audio (AudioWorklet).", true);
+    send = (m, transfer) => node.port.postMessage(m, transfer || []);
+    S.node = node; S.mode = "AudioWorklet";
+  } catch (e) {
+    // Ripiego: lo stesso motore dentro la pagina. Funziona, ma può scattare quando la pagina è occupata.
+    console.warn("AudioWorklet non usato:", e);
+    const Engine = new Function(code + "\nreturn LoopEngine;")();
+    const eng = new Engine(S.sr, m => onEngineMsg(m));
+    const node = S.ctx.createScriptProcessor(2048, 1, 2);
+    node.onaudioprocess = ev => eng.render(ev.outputBuffer.getChannelData(0), ev.outputBuffer.getChannelData(1));
+    send = m => eng.msg(m);
+    S.node = node; S.mode = "ScriptProcessor (ripiego)";
+  }
+  S.gain = S.ctx.createGain();
+  S.gain.gain.value = S.volume;
+  S.node.connect(S.gain);
+  S.gain.connect(S.ctx.destination);
+}
+
+/* ----- apertura del brano ----- */
+async function loadFile(file) {
+  if (!file) return;
+  status("Carico " + file.name + "…");
+  try {
+    send({ type: "pause" });
+    const bytes = await file.arrayBuffer();
+    S.ctx = S.ctx || new (window.AudioContext || window.webkitAudioContext)();
+    const buf = await new Promise((res, rej) => S.ctx.decodeAudioData(bytes, res, rej));
+    await ensureEngine();
+    const L = buf.getChannelData(0).slice();
+    const R = buf.numberOfChannels > 1 ? buf.getChannelData(1).slice() : null;
+    S.T = buf.duration; S.name = file.name;
+    S.pos = 0; S.playing = false; S.loopOn = true; S.ls = 0; S.le = S.T;
+    send({ type: "load", L, R }, R ? [L.buffer, R.buffer] : [L.buffer]);
+    send({ type: "semis", value: S.semis });
+    send({ type: "speed", value: S.speed });
+    sendLoop();
+    $("pos").max = S.T.toFixed(2);
+    $("info").textContent = `${file.name} · ${fmt(S.T)} · ${(S.sr / 1000).toFixed(1)} kHz · motore: ${S.mode}`;
+    document.querySelectorAll("button, input").forEach(el => el.disabled = false);
+    status("Spazio = Play/Pausa.");
+    updateUI(true);
+  } catch (e) {
+    console.error(e);
+    status("Non riesco ad aprire " + file.name + ": formato non riconosciuto dal browser.", true);
+  }
+}
+$("openBtn").addEventListener("click", () => $("fileInput").click());
+$("fileInput").addEventListener("change", e => { loadFile(e.target.files[0]); e.target.value = ""; });
+window.addEventListener("dragover", e => { e.preventDefault(); document.body.classList.add("dragover"); });
+window.addEventListener("dragleave", () => document.body.classList.remove("dragover"));
+window.addEventListener("drop", e => { e.preventDefault(); document.body.classList.remove("dragover"); loadFile(e.dataTransfer.files[0]); });
+
+/* ----- riproduzione ----- */
+function play() {
+  if (!S.node) return;
+  if (S.ctx.state !== "running") S.ctx.resume();      // chiamato dentro il clic: Safari lo permette
+  send({ type: "play" });
+}
+function pause() { send({ type: "pause" }); }
+function togglePlay() { if (S.playing) pause(); else play(); }
+function seek(t) { send({ type: "seek", pos: Math.min(S.T, Math.max(0, t)) * S.sr }); }
+$("playBtn").addEventListener("click", togglePlay);
+$("toLoopBtn").addEventListener("click", () => seek(S.ls));
+
+let posDrag = false;
+const posEl = $("pos");
+posEl.addEventListener("pointerdown", () => posDrag = true);
+posEl.addEventListener("input", () => seek(parseFloat(posEl.value)));
+["pointerup", "pointercancel", "change"].forEach(ev => posEl.addEventListener(ev, () => posDrag = false));
+
+/* ----- loop ----- */
+const MIN_LOOP = 0.05;
+function sendLoop() { send({ type: "loop", on: S.loopOn, ls: S.ls * S.sr, le: S.le * S.sr }); }
+function setLoop(ls, le) {
+  ls = Math.min(S.T, Math.max(0, ls)); le = Math.min(S.T, Math.max(0, le));
+  if (le - ls < MIN_LOOP) { status("La fine del loop deve venire dopo l'inizio.", true); updateUI(true); return; }
+  S.ls = ls; S.le = le;
+  status("Loop " + fmt(ls) + " – " + fmt(le) + " (" + (le - ls).toFixed(2) + " s)");
+  sendLoop(); updateUI(true);
+}
+$("loopOn").addEventListener("change", e => { S.loopOn = e.target.checked; sendLoop(); });
+$("setStartBtn").addEventListener("click", () => setLoop(S.pos, S.le > S.pos + MIN_LOOP ? S.le : S.T));
+$("setEndBtn").addEventListener("click", () => setLoop(S.ls < S.pos - MIN_LOOP ? S.ls : 0, S.pos));
+$("loopStart").addEventListener("change", e => { const t = parseTime(e.target.value); if (t === null) updateUI(true); else setLoop(t, S.le); });
+$("loopEnd").addEventListener("change", e => { const t = parseTime(e.target.value); if (t === null) updateUI(true); else setLoop(S.ls, t); });
+
+/* ----- tono e velocità ----- */
+const MAX_SEMIS = 3;
+function setSemis(v) {
+  S.semis = Math.min(MAX_SEMIS, Math.max(-MAX_SEMIS, v));
+  send({ type: "semis", value: S.semis });
+  updateUI();
+}
+$("semisDown").addEventListener("click", () => setSemis(S.semis - 1));
+$("semisUp").addEventListener("click", () => setSemis(S.semis + 1));
+$("semisReset").addEventListener("click", () => setSemis(0));
+function setSpeed(pct) {
+  S.speed = pct / 100;
+  send({ type: "speed", value: S.speed });
+  updateUI();
+}
+$("speed").addEventListener("input", e => setSpeed(parseInt(e.target.value, 10)));
+$("speedReset").addEventListener("click", () => { $("speed").value = 100; setSpeed(100); });
+
+function setVolume(pct) {
+  S.volume = pct / 100;
+  if (S.gain) S.gain.gain.setTargetAtTime(S.volume, S.ctx.currentTime, 0.015);   // rampa breve: niente clic
+  updateUI();
+}
+$("volume").addEventListener("input", e => setVolume(parseInt(e.target.value, 10)));
+
+/* ----- tastiera ----- */
+window.addEventListener("keydown", e => {
+  if (e.code !== "Space" || !S.node) return;
+  const t = e.target;
+  if (t.tagName === "INPUT" && t.type === "text") return;
+  e.preventDefault();
+  if (t.tagName === "BUTTON") t.blur();
+  togglePlay();
+});
+
+/* ----- interfaccia ----- */
+function updateUI(fields) {
+  setText($("playBtn"), S.playing ? "Pausa" : "Play");
+  setText($("time"), fmt(S.pos) + " / " + fmt(S.T));
+  if (!posDrag) posEl.value = S.pos.toFixed(2);
+  setText($("semisLabel"), (S.semis > 0 ? "+" : "") + S.semis + (Math.abs(S.semis) === 1 ? " semitono" : " semitoni"));
+  setText($("speedLabel"), Math.round(S.speed * 100) + "%");
+  setText($("volumeLabel"), Math.round(S.volume * 100) + "%");
+  if (S.node) { $("semisDown").disabled = S.semis <= -MAX_SEMIS; $("semisUp").disabled = S.semis >= MAX_SEMIS; }
+  if (fields) {
+    $("loopStart").value = fmt(S.ls); $("loopEnd").value = fmt(S.le); $("loopOn").checked = S.loopOn;
+  }
+}
+</script>
+</body>
+</html>
