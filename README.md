@@ -2,14 +2,16 @@
 
 A tiny practice tool that runs in your browser. Open a track, loop the part you want to work on, and change its key or slow it down while you play along. No install, nothing is saved or uploaded.
 
-**Status: early prototype (v0.3).** It exists to check sound quality and stability on Safari (Mac, iPhone, iPad). The interface is minimal and currently in Italian only.
+**Status: prototype (v0.18).** The audio engine has been checked on Safari (Mac, iPad, iPhone). The interface uses icons; the few texts are in Italian only for now.
 
 **Use it online:** https://goleon69.github.io/looploop/
 **Or offline:** download `looploop.html` and open it in a desktop browser.
 
 ## Features
 
-- Loop between two points: set them at the current position or type the times
+- Position slider: drag it, or tap anywhere on it, to move through the track
+- Loop between two points: the green and red flags set start and end at the current position; the counters next to them jump back to those points
+- Waveform view with zoom (Mac and iPad): drag the green and red markers to adjust the loop while it plays
 - Transpose by semitones (up to 3 up or down) without changing the duration
 - Slow down (50% to 100%) without changing the pitch
 - Volume control
@@ -17,13 +19,16 @@ A tiny practice tool that runs in your browser. Open a track, loop the part you 
 - Listening only: no audio file is written, so there is no re-encoding and no quality loss to manage
 - Everything happens locally: your audio never leaves your device
 
+On phones the waveform view is left out to keep the screen uncluttered: the loop is set with the flags.
+
 ## How it works
 
 Everything is in one file, `looploop.html` (HTML + CSS + JavaScript).
 
 - The track is decoded with the Web Audio API and played by an AudioWorklet that feeds it through [SoundTouchJS](https://github.com/cutterbl/SoundTouchJS) for pitch and tempo changes.
-- If the browser refuses the AudioWorklet, the same engine runs in the page as a fallback. The header shows which one is in use.
+- If the browser refuses the AudioWorklet, the same engine runs in the page as a fallback. The line under the track name shows which one is in use.
 - A 3 ms fade at the loop junction avoids clicks.
+- The waveform and the position slider are drawn on canvas; the icons are inline SVG.
 
 looploop is the sibling of [cutcut](https://github.com/goleon69/cutcut), a lossless MP3 trimmer.
 

@@ -18,115 +18,165 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>looploop</title>
 <style>
-  :root {
-    --bg: #16181d; --panel: #1f232a; --line: #2d323b; --text: #e6e8eb; --muted: #9aa1ab;
-    --start: #3ccf7a; --end: #ff5a5a; --head: #ffd24a; --accent: #3d7bd9;
+  :root {   /* Verde, rosso e giallo sono riservati a marker e cursore */
+    --bg: #171327; --panel: #221c38; --line: #3a3158; --text: #f2eefb; --muted: #a9a0c6;
+    --wave: #b494ff; --wave-off: #4a4069; --start: #3ccf7a; --end: #ff5a5a; --head: #ffd24a; --accent: #8b5cf6;
+    --accent-soft: rgba(139,92,246,.32); --on-soft: #fff; --icon: #c4acff;
+    --dim: rgba(0,0,0,.35);
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--text);
     font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
   header { display: flex; align-items: center; gap: 16px; padding: 12px 16px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
   h1 { margin: 0; font-size: 20px; letter-spacing: .5px; }
-  #info { color: var(--muted); }
+  #info { color: var(--muted); flex-basis: 100%; }
+  #info[hidden] { display: none; }
+  #motorInfo { font-size: 12px; opacity: .8; }
+  button.toggle[aria-pressed=true] { border-color: var(--accent); color: var(--on-soft); background: var(--accent-soft); }
+  button.toggle[aria-pressed=false] { color: var(--muted); }
+  button.counter { min-width: 68px; background: var(--bg); }
+  /* Icone: disegnate qui dentro, stesso tratto per tutte */
+  svg.ic { display: block; width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2;
+    stroke-linecap: round; stroke-linejoin: round; }
+  svg.ic.wide { width: 36px; }
+  svg.ic.big { width: 26px; height: 26px; }
+  #extBtn { padding: 4px 8px; }
+  button.icon { padding: 6px 10px; display: inline-flex; align-items: center; justify-content: center; }
+  #playBtn .ic-pause, #playBtn.playing .ic-play { display: none; }
+  #playBtn.playing .ic-pause { display: block; }
+  button.flag-start { color: var(--start); }
+  button.flag-end { color: var(--end); }
+
+  .group .lbl { color: var(--muted); }
+  body.compact #ext { display: none; }
   main { padding: 16px; max-width: 860px; }
   button { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 6px;
     padding: 7px 12px; font: inherit; cursor: pointer; }
   button:hover:not(:disabled) { border-color: var(--muted); }
   button:disabled { opacity: .4; cursor: default; }
   button * { pointer-events: none; }   /* il clic arriva sempre al bottone, anche sopra la scritta */
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 96px; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; min-width: 72px; }
   button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 12px 0; }
   .group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; background: var(--panel); border: 1px solid var(--line);
     border-radius: 6px; padding: 8px 10px; }
-  .group > .name { color: var(--muted); min-width: 64px; }
+  .group > .name { color: var(--icon); min-width: 40px; display: inline-flex; align-items: center; }
   .group label { color: var(--muted); display: inline-flex; align-items: center; gap: 6px; }
   .pair { display: inline-flex; align-items: center; gap: 8px; }
   input[type=text] { width: 96px; background: var(--bg); color: var(--text); border: 1px solid var(--line);
     border-radius: 4px; padding: 5px 6px; font: 14px ui-monospace, Menlo, monospace; }
   input[type=range] { accent-color: var(--accent); }
-  #pos { width: 100%; margin: 0; }
-  #speed, #volume { width: 240px; max-width: 100%; }
+  .canvas-wrap { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+  #posBar { display: block; flex: 1 1 0; width: 0; min-width: 0; height: 28px; cursor: pointer; border-radius: 6px; }
+  /* Tutti i riquadri dei comandi hanno la stessa larghezza */
+  .group.wide { width: 368px; max-width: 100%; flex-wrap: nowrap; }
+  .group.loop .pair { flex: 1 1 0; min-width: 0; }
+  .group.loop button.counter { flex: 1 1 0; min-width: 0; }
+  #semisLabel { flex: 0 0 56px; }
+  #semisDown, #semisUp { flex: 1 1 0; font-size: 18px; line-height: 1; padding-top: 6px; padding-bottom: 6px; }
+  #wave { display: block; width: 100%; height: 200px; cursor: crosshair; }
+  #ext { margin-top: 0; }
+  #wave, #posBar { touch-action: none; user-select: none; -webkit-user-select: none; }
+  .zsym { color: var(--muted); font-weight: bold; width: 10px; text-align: center; }
+  #zoom { flex: 1 1 0; width: 0; min-width: 0; }
+  #speed, #volume { flex: 1 1 0; width: 0; min-width: 0; }
   .mono { font-family: ui-monospace, Menlo, monospace; }
   #time { font-size: 16px; }
-  #semisLabel { min-width: 112px; text-align: center; }
+  #semisLabel { min-width: 40px; text-align: center; font-size: 16px; }
   #speedLabel, #volumeLabel { min-width: 48px; text-align: right; }
-  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
-  #status { color: var(--muted); min-height: 20px; }
+  #status { color: var(--muted); min-height: 20px; flex: 1 1 0; min-width: 0; }
   #status.err { color: var(--end); }
   body.dragover main { outline: 2px dashed var(--accent); outline-offset: -6px; }
   button, select, input { touch-action: manipulation; }   /* niente zoom con doppio tocco */
+  /* Telefono (anche in orizzontale): niente vista estesa */
+  @media (max-width: 640px), (pointer: coarse) and (max-height: 500px) {
+    #extBtn { display: none; }
+  }
   @media (max-width: 640px) {
     header { gap: 8px 10px; padding: 10px 12px; }
-    #info { flex-basis: 100%; font-size: 13px; }
+    #info { font-size: 13px; }
+    #time { font-size: 15px; }
     main { padding: 12px; }
+    #posBar { height: 36px; }
+    .group.wide { width: auto; }
     .row > .group { flex: 1 1 100%; }
     button { padding: 11px 14px; min-height: 44px; }
-    input[type=text] { padding: 9px 6px; font-size: 16px; width: 124px; }
-    .pair { flex: 1 1 100%; }
-    .pair label { min-width: 44px; }   /* 16 px: l'iPhone non ingrandisce la pagina */
-    input[type=checkbox] { width: 22px; height: 22px; }
-    #speed, #volume { flex: 1 1 0; width: 0; min-width: 0; }
-    #pos { height: 36px; }
+    button.icon { padding: 8px 11px; }
+    .group { gap: 6px; }
+    .pair { flex: 1 1 0; gap: 6px; }
+    button.counter { flex: 1 1 0; min-width: 0; padding-left: 4px; padding-right: 4px; }
+    svg.ic { width: 24px; height: 24px; }
+    svg.ic.wide { width: 38px; }
+    #speed, #volume { flex: 1 1 0; width: 0; min-width: 0; height: 36px; }
   }
 </style>
 </head>
-<body>
+<body class="compact">
 <header>
-  <h1>looploop <span style="font-size:12px;color:var(--muted);font-weight:normal">v0.3</span></h1>
-  <button id="openBtn">Apri brano…</button>
+  <h1>looploop <span style="font-size:12px;color:var(--muted);font-weight:normal">v0.18</span></h1>
+  <button id="openBtn" class="icon" title="Apri brano" aria-label="Apri brano"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18.5V6a1 1 0 0 1 1-1h5l2 2.5h8a1 1 0 0 1 1 1V10"/><path d="M3.2 19l2.5-8.2a1.2 1.2 0 0 1 1.1-.8h14.4a.9.9 0 0 1 .9 1.2L19.9 18.200a1.2 1.2 0 0 1-1.1.800z"/></svg></button>
   <input id="fileInput" type="file" accept="audio/*,.mp3,.m4a,.aac,.wav,.aif,.aiff,.flac" hidden>
-  <span id="info"></span>
+  <button id="playBtn" class="primary icon" disabled title="Play" aria-label="Play"><svg class="ic ic-play" viewBox="0 0 24 24" aria-hidden="true"><path d="M7.5 4.500v15l12-7.500z" fill="currentColor"/></svg><svg class="ic ic-pause" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 5h3.500v14H6.500zM14 5h3.500v14H14z" fill="currentColor"/></svg></button>
+  <button id="extBtn" class="toggle" aria-pressed="false" title="Mostra o nasconde la forma d'onda con lo zoom" aria-label="Forma d'onda"><svg class="ic big" viewBox="0 0 24 24" aria-hidden="true"><mask id="extMask" maskUnits="userSpaceOnUse" x="0" y="0" width="24" height="24"><rect width="24" height="24" fill="#fff" stroke="none"/><circle cx="15" cy="13.5" r="6.7" fill="#000" stroke="none"/><path d="M18.3 16.8 22 20.5" stroke="#000" stroke-width="5.4"/></mask><path d="M2 10v4M4.6 7.5v9M7.2 4.5v15M9.8 8.5v7M12.4 6v12M15 3.5v17M17.6 8v8M20.2 6v12M22.4 9.5v5" stroke-width="1.5" mask="url(#extMask)"/><circle cx="15" cy="13.5" r="4.5"/><path d="M18.3 16.8 22 20.5" stroke-width="2.4"/></svg></button>
+  <span id="time" class="mono">00:00 / 00:00</span>
+  <div id="info" hidden><div id="trackInfo"></div><div id="motorInfo"></div></div>
 </header>
 <main>
   <div class="row">
-    <button id="playBtn" class="primary" disabled>Play</button>
-    <button id="toLoopBtn" disabled>Inizio loop</button>
-    <span id="time" class="mono">00:00.000 / 00:00.000</span>
+    <div class="group wide"><canvas id="posBar" role="slider" tabindex="0" aria-label="Posizione nel brano" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"></canvas></div>
   </div>
-  <input id="pos" type="range" min="0" max="1" step="0.01" value="0" disabled aria-label="Posizione nel brano">
+  <div id="ext">
+    <div class="row">
+      <div class="group wide">
+        <span class="name" title="Zoom" role="img" aria-label="Zoom"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.5" cy="10.5" r="7.5"/><path d="M16 16l5.500 5.500"/><path d="M10.500 6.3v4.4M8.3 8.500h4.400M8.300 13.800h4.400" stroke-width="1.7"/></svg></span>
+        <span class="zsym">−</span>
+        <input id="zoom" type="range" min="0" max="1000" value="0" disabled aria-label="Zoom">
+        <span class="zsym">+</span>
+      </div>
+    </div>
+    <div class="canvas-wrap"><canvas id="wave" aria-label="Forma d'onda"></canvas></div>
+  </div>
 
   <div class="row">
-    <div class="group">
-      <span class="name">Loop</span>
-      <label><input id="loopOn" type="checkbox" checked disabled> attivo</label>
-      <span class="pair"><span class="dot" style="background:var(--start)"></span><label for="loopStart">Inizio</label>
-        <input id="loopStart" type="text" inputmode="decimal" disabled>
-        <button id="setStartBtn" disabled>Qui</button></span>
-      <span class="pair"><span class="dot" style="background:var(--end)"></span><label for="loopEnd">Fine</label>
-        <input id="loopEnd" type="text" inputmode="decimal" disabled>
-        <button id="setEndBtn" disabled>Qui</button></span>
+    <div class="group wide loop">
+      <button id="loopOn" class="toggle icon" aria-pressed="true" disabled title="Loop attivo" aria-label="Loop"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M17 2.500l3.5 3.5-3.5 3.5"/><path d="M3.5 11.500V10a4 4 0 0 1 4-4h13"/><path d="M7 21.5 3.5 18 7 14.5"/><path d="M20.5 12.500V14a4 4 0 0 1-4 4h-13"/></svg></button>
+      <span class="pair">
+        <button id="setStartBtn" class="icon flag-start" disabled title="Metti l'inizio del loop dove sei ora" aria-label="Metti l'inizio del loop dove sei ora"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 21.500v-18"/><path d="M5.5 4.500h13l-3.5 4.5 3.5 4.500h-13z" fill="currentColor"/></svg></button>
+        <button id="loopStart" class="mono counter" disabled title="Vai all'inizio del loop">00:00</button></span>
+      <span class="pair">
+        <button id="setEndBtn" class="icon flag-end" disabled title="Metti la fine del loop dove sei ora" aria-label="Metti la fine del loop dove sei ora"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 21.500v-18"/><path d="M5.5 4.500h13l-3.5 4.5 3.5 4.500h-13z" fill="currentColor"/></svg></button>
+        <button id="loopEnd" class="mono counter" disabled title="Vai alla fine del loop">00:00</button></span>
     </div>
   </div>
 
   <div class="row">
-    <div class="group">
-      <span class="name">Tono</span>
+    <div class="group wide">
+      <span class="name" title="Tono (semitoni)" role="img" aria-label="Tono, in semitoni"><svg class="ic wide" viewBox="0 0 40 24" aria-hidden="true"><path d="M5 3v17"/><path d="M5 20c5-2.5 7-5 7-7.5 0-2-1.5-3-3.2-3-1.6 0-3 .9-3.8 2.5"/><path d="M21.5 3.5 17.5 20.5" stroke-width="1.5" opacity=".6"/><path d="M28 4.500v16.500M34 3v16.5"/><path d="M25 10.500l12-3M25 16.500l12-3" stroke-width="2.6"/></svg></span>
       <button id="semisDown" disabled aria-label="Un semitono giù">−</button>
-      <span id="semisLabel" class="mono">0 semitoni</span>
+      <span id="semisLabel" class="mono">0</span>
       <button id="semisUp" disabled aria-label="Un semitono su">+</button>
-      <button id="semisReset" disabled>Originale</button>
     </div>
   </div>
 
   <div class="row">
-    <div class="group">
-      <span class="name">Velocità</span>
+    <div class="group wide">
+      <span class="name" title="Velocità" role="img" aria-label="Velocità"><svg class="ic wide" viewBox="0 0 30 24" aria-hidden="true"><path d="M4.5 16a9.5 8.5 0 0 1 19 0z"/><circle cx="26.2" cy="13.3" r="2.3"/><path d="M8.5 16v3.500M19.5 16v3.500M4.5 16l-2.7 1.2"/><path d="M14 7.600V16M9.3 10.200l2 5.800M18.7 10.200l-2 5.8" stroke-width="1.2" opacity=".7"/></svg></span>
       <input id="speed" type="range" min="50" max="100" step="5" value="100" disabled aria-label="Velocità">
       <span id="speedLabel" class="mono">100%</span>
-      <button id="speedReset" disabled>100%</button>
     </div>
   </div>
 
   <div class="row">
-    <div class="group">
-      <span class="name">Volume</span>
+    <div class="group wide">
+      <span class="name" title="Volume" role="img" aria-label="Volume"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3.5 9.500H7l4.5-4v13L7 14.500H3.500z"/><path d="M15 9.200a4 4 0 0 1 0 5.6"/><path d="M17.8 6.400a8 8 0 0 1 0 11.2"/></svg></span>
       <input id="volume" type="range" min="0" max="100" step="1" value="100" disabled aria-label="Volume">
       <span id="volumeLabel" class="mono">100%</span>
     </div>
   </div>
 
-  <div id="status">Apri un brano, oppure trascinalo qui.</div>
+  <div class="row">
+    <div class="group wide"><div id="status">Apri un brano, oppure trascinalo qui.</div></div>
+  </div>
 </main>
 
 <!-- Motore audio: libreria SoundTouchJS (LGPL 2.1, testo non modificato) seguita dal motore di looploop.
@@ -915,13 +965,20 @@ if (typeof registerProcessor === "function") {
 "use strict";
 const $ = id => document.getElementById(id);
 const S = { ctx: null, node: null, mode: "", sr: 0, T: 0, pos: 0, playing: false,
-            loopOn: true, ls: 0, le: 0, semis: 0, speed: 1, volume: 1, gain: null, name: "" };
+            loopOn: true, ls: 0, le: 0, semis: 0, speed: 1, volume: 1, gain: null, name: "",
+            buf: null, peaks: null, viewStart: 0, viewDur: 1, ext: false, scrub: null };
 
 function fmt(t) {
   t = Math.max(0, t);
   const m = Math.floor(t / 60), s = t - m * 60;
   return String(m).padStart(2, "0") + ":" + s.toFixed(3).padStart(6, "0");
 }
+// Contatori: solo minuti e secondi
+function fmtS(t) {
+  t = Math.floor(Math.max(0, t) + 1e-6);
+  return String(Math.floor(t / 60)).padStart(2, "0") + ":" + String(t % 60).padStart(2, "0");
+}
+const fmtR = t => fmtS(Math.round(t));   // punti del loop: arrotondati al secondo più vicino
 function parseTime(str) {
   str = str.trim().replace(",", ".");
   const p = str.split(":");
@@ -934,6 +991,7 @@ function parseTime(str) {
 function status(msg, err) { const el = $("status"); el.textContent = msg; el.classList.toggle("err", !!err); }
 // Safari annulla il clic se la scritta di un bottone viene riscritta mentre lo si preme: si scrive solo se cambia
 function setText(el, txt) { if (el.textContent !== txt) el.textContent = txt; }
+function setAttr(el, name, v) { if (el.getAttribute(name) !== v) el.setAttribute(name, v); }
 
 /* ----- motore ----- */
 // iPhone: senza questo l'audio della pagina resta muto se l'interruttore silenzioso è attivo
@@ -944,6 +1002,7 @@ function onEngineMsg(m) {
   if (m.type !== "pos") return;
   S.pos = m.pos / S.sr;
   S.playing = m.playing;
+  follow();
   updateUI();
 }
 async function ensureEngine() {
@@ -992,15 +1051,18 @@ async function loadFile(file) {
     const L = buf.getChannelData(0).slice();
     const R = buf.numberOfChannels > 1 ? buf.getChannelData(1).slice() : null;
     S.T = buf.duration; S.name = file.name;
+    S.buf = buf; S.peaks = makePeaks(buf); S.viewStart = 0; S.viewDur = S.T; $("zoom").value = 0;
     S.pos = 0; S.playing = false; S.loopOn = true; S.ls = 0; S.le = S.T;
     send({ type: "load", L, R }, R ? [L.buffer, R.buffer] : [L.buffer]);
     send({ type: "semis", value: S.semis });
     send({ type: "speed", value: S.speed });
     sendLoop();
-    $("pos").max = S.T.toFixed(2);
-    $("info").textContent = `${file.name} · ${fmt(S.T)} · ${(S.sr / 1000).toFixed(1)} kHz · motore: ${S.mode}`;
+    $("trackInfo").textContent = `${file.name} · ${fmtS(S.T)} · ${(S.sr / 1000).toFixed(1)} kHz`;
+    $("motorInfo").textContent = "motore: " + S.mode;
+    $("info").hidden = false;
     document.querySelectorAll("button, input").forEach(el => el.disabled = false);
-    status("Spazio = Play/Pausa.");
+    status(COARSE ? "Sposta il cursore per muoverti nel brano. Le bandiere fissano inizio e fine del loop nel punto in cui sei."
+                  : "Sposta il cursore per muoverti nel brano. Le bandiere fissano inizio e fine del loop nel punto in cui sei. Spazio = Play/Pausa.");
     updateUI(true);
   } catch (e) {
     console.error(e);
@@ -1023,29 +1085,294 @@ function pause() { send({ type: "pause" }); }
 function togglePlay() { if (S.playing) pause(); else play(); }
 function seek(t) { send({ type: "seek", pos: Math.min(S.T, Math.max(0, t)) * S.sr }); }
 $("playBtn").addEventListener("click", togglePlay);
-$("toLoopBtn").addEventListener("click", () => seek(S.ls));
 
-let posDrag = false;
-const posEl = $("pos");
-posEl.addEventListener("pointerdown", () => posDrag = true);
-posEl.addEventListener("input", () => seek(parseFloat(posEl.value)));
-["pointerup", "pointercancel", "change"].forEach(ev => posEl.addEventListener(ev, () => posDrag = false));
+/* ----- forma d'onda (ripresa da cutcut) ----- */
+const COARSE = window.matchMedia && matchMedia("(pointer: coarse)").matches;   // schermo touch
+const BIN = 256, MIN_VIEW = 0.5;
+// Vista estesa (forma d'onda ingrandita e zoom): all'apertura è sempre spenta, si accende col bottone "Estesa";
+// sul telefono non c'è
+const PHONE = window.matchMedia ? matchMedia("(max-width: 640px), (pointer: coarse) and (max-height: 500px)") : { matches: false };
+const extended = () => S.ext && !PHONE.matches;
+function applyExt() {
+  document.body.classList.toggle("compact", !extended());
+  $("extBtn").setAttribute("aria-pressed", String(S.ext));
+  draw();
+}
+function makePeaks(buf) {
+  const n = Math.ceil(buf.length / BIN), min = new Float32Array(n), max = new Float32Array(n);
+  min.fill(1); max.fill(-1);
+  for (let c = 0; c < buf.numberOfChannels; c++) {
+    const d = buf.getChannelData(c);
+    for (let i = 0; i < d.length; i++) {
+      const j = (i / BIN) | 0, v = d[i];
+      if (v < min[j]) min[j] = v;
+      if (v > max[j]) max[j] = v;
+    }
+  }
+  return { min, max };
+}
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+function fitCanvas(cv) {
+  const r = window.devicePixelRatio || 1, w = Math.round(cv.clientWidth * r), h = Math.round(cv.clientHeight * r);
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; }
+  return r;
+}
+// Con il loop attivo, la parte fuori dal loop è disegnata più scura
+const inLoop = t => !S.loopOn || (t >= S.ls && t <= S.le);
+function drawWave(g, W, H, t0, dur, colorIn, colorOut) {
+  const buf = S.buf, rate = buf.sampleRate, spp = dur * rate / W, mid = H / 2;
+  const chans = []; for (let c = 0; c < buf.numberOfChannels; c++) chans.push(buf.getChannelData(c));
+  for (let x = 0; x < W; x++) {
+    const a = (t0 * rate) + x * spp, bnd = a + spp;
+    let lo = 1, hi = -1;
+    if (spp >= BIN) {
+      const j0 = Math.max(0, Math.floor(a / BIN)), j1 = Math.min(S.peaks.min.length, Math.ceil(bnd / BIN));
+      for (let j = j0; j < j1; j++) { if (S.peaks.min[j] < lo) lo = S.peaks.min[j]; if (S.peaks.max[j] > hi) hi = S.peaks.max[j]; }
+    } else {
+      const i0 = Math.max(0, Math.floor(a)), i1 = Math.min(buf.length, Math.max(i0 + 1, Math.ceil(bnd)));
+      for (const d of chans) for (let i = i0; i < i1; i++) { if (d[i] < lo) lo = d[i]; if (d[i] > hi) hi = d[i]; }
+    }
+    if (hi < lo) continue;
+    g.fillStyle = inLoop(t0 + (x + .5) * dur / W) ? colorIn : colorOut;
+    const y1 = mid - hi * mid * .95, y2 = mid - lo * mid * .95;
+    g.fillRect(x, y1, 1, Math.max(1, y2 - y1));
+  }
+}
+function drawMain() {
+  if (!extended()) return;
+  const cv = $("wave"), r = fitCanvas(cv), g = cv.getContext("2d"), W = cv.width, H = cv.height;
+  g.clearRect(0, 0, W, H);
+  if (!S.buf) return;
+  const rulerH = 20 * r, wH = H - rulerH, t0 = S.viewStart, dur = S.viewDur;
+  const X = t => (t - t0) / dur * W;
+  if (S.loopOn) {
+    g.fillStyle = css("--dim");
+    if (S.ls > t0) g.fillRect(0, 0, X(S.ls), wH);
+    if (S.le < t0 + dur) g.fillRect(X(S.le), 0, W - X(S.le), wH);
+  }
+  drawWave(g, W, wH, t0, dur, css("--wave"), css("--wave-off"));
+  // righello
+  g.fillStyle = css("--line"); g.fillRect(0, wH, W, 1);
+  const steps = [0.01,0.02,0.05,0.1,0.2,0.5,1,2,5,10,15,30,60,120,300,600];
+  const step = steps.find(s => s / dur * W >= 90 * r) || 600;
+  g.fillStyle = css("--muted"); g.font = `${11 * r}px ui-monospace, Menlo, monospace`; g.textBaseline = "middle";
+  for (let t = Math.ceil(t0 / step) * step; t <= t0 + dur; t += step) {
+    const x = Math.round(X(t)); g.fillRect(x, wH, 1, 5 * r);
+    g.fillText(step < 1 ? fmt(t) : fmt(t).slice(0, 5), x + 3 * r, wH + rulerH / 2 + 2 * r);
+  }
+  drawMarkers(g, X, W, wH, r, markerGeom());
+  const hx = X(shownPos());
+  if (hx >= 0 && hx <= W) { g.fillStyle = css("--head"); g.fillRect(Math.round(hx), 0, Math.max(1, r), wH); }
+}
+// Mentre si trascina sulla vista d'insieme (vista compatta) si mostra il punto sotto il dito
+const shownPos = () => S.scrub !== null ? S.scrub : S.pos;
+// Barra di posizione: un semplice cursore che avanza col brano e si può prendere e spostare.
+// Mostra anche dove cade il loop (tratto più chiaro, tacca verde all'inizio e rossa alla fine).
+const barPad = () => COARSE ? 14 : 11;          // margine ai lati, in pixel CSS: il pomello non esce dal bordo
+function drawBar() {
+  const cv = $("posBar"), r = fitCanvas(cv), g = cv.getContext("2d"), W = cv.width, H = cv.height;
+  g.clearRect(0, 0, W, H);
+  const pad = barPad() * r, mid = H / 2, th = 6 * r, T = S.buf ? S.T : 1;
+  const X = t => pad + t / T * (W - 2 * pad);
+  const bar = (x0, x1, color) => {
+    g.fillStyle = color; g.beginPath();
+    if (g.roundRect) g.roundRect(x0, mid - th / 2, Math.max(0, x1 - x0), th, th / 2); else g.rect(x0, mid - th / 2, Math.max(0, x1 - x0), th);
+    g.fill();
+  };
+  bar(pad, W - pad, css("--line"));
+  if (!S.buf) return;
+  const pos = shownPos();
+  if (S.loopOn) bar(X(S.ls), X(S.le), css("--wave-off"));
+  bar(pad, X(pos), css("--accent"));
+  g.save();
+  if (!S.loopOn) g.globalAlpha = .45;
+  const tick = (t, color) => { g.fillStyle = color; g.fillRect(Math.round(X(t)) - r, mid - 8 * r, 2 * r, 16 * r); };
+  tick(S.ls, css("--start")); tick(S.le, css("--end"));
+  g.restore();
+  const kr = (COARSE ? 11 : 8) * r;             // pomello
+  g.beginPath(); g.arc(X(pos), mid, kr, 0, Math.PI * 2); g.fillStyle = css("--text"); g.fill();
+  g.lineWidth = 2 * r; g.strokeStyle = css("--accent"); g.stroke();
+  cv.setAttribute("aria-valuemax", String(Math.round(S.T))); cv.setAttribute("aria-valuenow", String(Math.round(pos)));
+  cv.setAttribute("aria-valuetext", fmtS(pos) + " di " + fmtS(S.T));
+}
+/* ----- marker di inizio e fine loop: linea più maniglia (inizio in alto, fine in basso) ----- */
+// Misure in pixel CSS: larghezza e altezza della maniglia, e margine intorno entro cui la si afferra
+function markerGeom() { return { hw: COARSE ? 26 : 14, hh: COARSE ? 32 : 22, tol: COARSE ? 14 : 6 }; }
+function drawMarkers(g, X, W, H, r, m) {
+  const hw = m.hw * r, hh = m.hh * r;
+  const tab = (x, y) => {
+    g.beginPath();
+    if (g.roundRect) g.roundRect(x, y, hw, hh, 3 * r); else g.rect(x, y, hw, hh);
+    g.fill();
+    g.fillStyle = "rgba(0,0,0,.55)";                       // due righine: "si trascina"
+    g.fillRect(x + hw / 2 - 2 * r, y + hh * .28, r, hh * .44);
+    g.fillRect(x + hw / 2 + r, y + hh * .28, r, hh * .44);
+  };
+  g.save();
+  if (!S.loopOn) g.globalAlpha = .5;                       // loop spento: marker attenuati
+  const xs = Math.round(X(S.ls)), xe = Math.round(X(S.le));
+  if (xs >= -hw && xs <= W + hw) { g.fillStyle = css("--start"); g.fillRect(xs - r, 0, 2 * r, H); tab(xs - r, 0); }
+  if (xe >= -hw && xe <= W + hw) { g.fillStyle = css("--end"); g.fillRect(xe - r, 0, 2 * r, H); tab(xe + r - hw, H - hh); }
+  g.restore();
+}
+// Quale marker si trova sotto il puntatore (null = nessuno). px, py in pixel CSS dentro il disegno alto H.
+function hitMarker(px, py, xs, xe, H, m) {
+  const inS = px >= xs - m.tol && px <= xs + (py <= m.hh + m.tol ? m.hw + m.tol : m.tol);
+  const inE = px <= xe + m.tol && px >= xe - (py >= H - m.hh - m.tol ? m.hw + m.tol : m.tol);
+  if (inS && inE) return py < H / 2 ? "start" : "end";    // marker vicinissimi: sopra l'inizio, sotto la fine
+  return inS ? "start" : inE ? "end" : null;
+}
+// Sposta un marker mentre lo si trascina: il loop cambia subito, anche a brano in corso
+function dragMarker(what, t) {
+  t = Math.min(S.T, Math.max(0, t));
+  const gap = Math.min(MIN_DRAG, S.T);                  // trascinando, i marker non si avvicinano più di così
+  if (what === "start") S.ls = Math.max(0, Math.min(t, S.le - gap));
+  else S.le = Math.min(S.T, Math.max(t, S.ls + gap));
+  status("Loop " + fmtR(S.ls) + " – " + fmtR(S.le) + " (" + (S.le - S.ls).toFixed(1) + " s)");
+  sendLoop(); updateUI(true);
+}
+// Al rilascio si riascolta il punto: dall'inizio, oppure da 2 secondi prima della fine per sentire la giunzione
+function relisten(what) { seek(what === "start" ? S.ls : Math.max(S.ls, S.le - 2)); }
+
+let drawPending = false;
+function draw() {
+  if (drawPending) return; drawPending = true;
+  requestAnimationFrame(() => { drawPending = false; drawMain(); drawBar(); });
+}
+
+/* ----- vista e zoom: lo zoom cambia solo dal cursore Zoom ----- */
+function setView(start, dur) {
+  S.viewDur = Math.min(S.T, Math.max(Math.min(MIN_VIEW, S.T), dur));
+  S.viewStart = Math.min(S.T - S.viewDur, Math.max(0, start));
+  updateUI();
+}
+function zoomToSlider() {
+  const z = $("zoom").value / 1000, minD = Math.min(MIN_VIEW, S.T);
+  const dur = S.T * Math.pow(minD / S.T, z);
+  const anchor = (S.pos >= S.viewStart && S.pos <= S.viewStart + S.viewDur) ? S.pos : S.viewStart + S.viewDur / 2;
+  const frac = (anchor - S.viewStart) / S.viewDur;
+  setView(anchor - frac * dur, dur);
+}
+function centerOn(t) { setView(t - S.viewDur / 2, S.viewDur); }
+// Durante l'ascolto la vista segue il cursore, ma non mentre la si sta spostando a mano
+function follow() {
+  if (!S.buf || !S.playing || drag || ovDrag) return;
+  if (S.pos > S.viewStart + S.viewDur || S.pos < S.viewStart) {
+    S.viewStart = Math.min(S.T - S.viewDur, Math.max(0, S.pos - S.viewDur * 0.05));
+  }
+}
+$("zoom").addEventListener("input", zoomToSlider);
+
+/* ----- tocco e trascinamento sulla forma d'onda ----- */
+const wave = $("wave");
+let drag = null;
+function evTime(e) {
+  const rc = wave.getBoundingClientRect();
+  return S.viewStart + (e.clientX - rc.left) / rc.width * S.viewDur;
+}
+function waveHit(e) {
+  const rc = wave.getBoundingClientRect(), X = t => (t - S.viewStart) / S.viewDur * rc.width;
+  return hitMarker(e.clientX - rc.left, e.clientY - rc.top, X(S.ls), X(S.le), rc.height - 20, markerGeom());
+}
+wave.addEventListener("pointerdown", e => {
+  if (!S.buf) return;
+  e.preventDefault();
+  wave.setPointerCapture(e.pointerId);
+  drag = { what: waveHit(e), moved: false, x: e.clientX, vs: S.viewStart };
+  if (drag.what) wave.style.cursor = "grabbing";
+});
+wave.addEventListener("pointermove", e => {
+  if (!S.buf) return;
+  if (!drag) { wave.style.cursor = waveHit(e) ? "ew-resize" : "crosshair"; return; }
+  if (Math.abs(e.clientX - drag.x) > (e.pointerType === "touch" ? 8 : 2)) drag.moved = true;
+  if (!drag.moved) return;
+  const rc = wave.getBoundingClientRect();
+  if (drag.what) {
+    // trascinando oltre il bordo, la vista scorre
+    if (e.clientX < rc.left) setView(S.viewStart - S.viewDur * 0.02, S.viewDur);
+    else if (e.clientX > rc.right) setView(S.viewStart + S.viewDur * 0.02, S.viewDur);
+    dragMarker(drag.what, Math.min(S.viewStart + S.viewDur, Math.max(S.viewStart, evTime(e))));
+    return;
+  }
+  // zona vuota: la forma d'onda scorre seguendo il dito / il mouse
+  setView(drag.vs - (e.clientX - drag.x) / rc.width * S.viewDur, S.viewDur);
+});
+const endDrag = e => {
+  if (!S.buf || !drag) return;
+  if (e.type === "pointerup") {
+    if (!drag.moved) seek(evTime(e));                 // tocco senza trascinare: la riproduzione va lì
+    else if (drag.what) relisten(drag.what);
+  }
+  drag = null;
+  wave.style.cursor = "crosshair";
+};
+wave.addEventListener("pointerup", endDrag);
+wave.addEventListener("pointercancel", endDrag);
+wave.addEventListener("wheel", e => {
+  if (!S.buf) return;
+  e.preventDefault();
+  const d = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+  setView(S.viewStart + d / wave.clientWidth * S.viewDur, S.viewDur);
+}, { passive: false });
+
+// Barra di posizione: toccare o trascinare sposta la riproduzione, che riparte dal punto in cui si alza il dito.
+// Mentre si trascina, pomello e tempo mostrano il punto sotto il dito.
+const ov = $("posBar");
+let ovDrag = false;
+const ovTime = e => {
+  const rc = ov.getBoundingClientRect(), pad = barPad();
+  return Math.min(S.T, Math.max(0, (e.clientX - rc.left - pad) / (rc.width - 2 * pad) * S.T));
+};
+function jumpTo(t) {                      // sposta la riproduzione; la forma d'onda, se aperta, la segue
+  S.pos = t; seek(t);
+  if (extended() && (t < S.viewStart || t > S.viewStart + S.viewDur)) centerOn(t);
+}
+ov.addEventListener("pointerdown", e => {
+  if (!S.buf) return;
+  e.preventDefault();
+  ov.setPointerCapture(e.pointerId);
+  ovDrag = true; S.scrub = ovTime(e); updateUI();
+});
+ov.addEventListener("pointermove", e => { if (ovDrag) { S.scrub = ovTime(e); updateUI(); } });
+ov.addEventListener("pointerup", () => {
+  if (!ovDrag) return;
+  const t = S.scrub; ovDrag = false; S.scrub = null;
+  if (t !== null) jumpTo(t);
+  updateUI();
+});
+ov.addEventListener("pointercancel", () => { ovDrag = false; S.scrub = null; updateUI(); });
+ov.addEventListener("keydown", e => {     // frecce: 5 secondi indietro o avanti
+  if (!S.buf || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+  e.preventDefault();
+  jumpTo(Math.min(S.T, Math.max(0, S.pos + (e.key === "ArrowRight" ? 5 : -5))));
+});
+$("extBtn").addEventListener("click", () => {
+  S.ext = !S.ext;
+  applyExt();
+});
+if (PHONE.addEventListener) PHONE.addEventListener("change", applyExt);
+window.addEventListener("resize", draw);
 
 /* ----- loop ----- */
-const MIN_LOOP = 0.05;
+const MIN_LOOP = 0.05, MIN_DRAG = 0.25;
 function sendLoop() { send({ type: "loop", on: S.loopOn, ls: S.ls * S.sr, le: S.le * S.sr }); }
 function setLoop(ls, le) {
   ls = Math.min(S.T, Math.max(0, ls)); le = Math.min(S.T, Math.max(0, le));
   if (le - ls < MIN_LOOP) { status("La fine del loop deve venire dopo l'inizio.", true); updateUI(true); return; }
   S.ls = ls; S.le = le;
-  status("Loop " + fmt(ls) + " – " + fmt(le) + " (" + (le - ls).toFixed(2) + " s)");
+  status("Loop " + fmtR(ls) + " – " + fmtR(le) + " (" + (le - ls).toFixed(1) + " s)");
   sendLoop(); updateUI(true);
 }
-$("loopOn").addEventListener("change", e => { S.loopOn = e.target.checked; sendLoop(); });
+$("loopOn").addEventListener("click", () => { S.loopOn = !S.loopOn; sendLoop(); updateUI(true); });
+// I contatori di inizio e fine sono bottoni: portano la riproduzione (e la vista) a quel punto
+function goTo(t) {
+  seek(t);
+  if (extended() && (t < S.viewStart || t > S.viewStart + S.viewDur)) centerOn(t);
+}
+$("loopStart").addEventListener("click", () => goTo(S.ls));
+$("loopEnd").addEventListener("click", () => goTo(Math.max(S.ls, S.le - 2)));
 $("setStartBtn").addEventListener("click", () => setLoop(S.pos, S.le > S.pos + MIN_LOOP ? S.le : S.T));
 $("setEndBtn").addEventListener("click", () => setLoop(S.ls < S.pos - MIN_LOOP ? S.ls : 0, S.pos));
-$("loopStart").addEventListener("change", e => { const t = parseTime(e.target.value); if (t === null) updateUI(true); else setLoop(t, S.le); });
-$("loopEnd").addEventListener("change", e => { const t = parseTime(e.target.value); if (t === null) updateUI(true); else setLoop(S.ls, t); });
 
 /* ----- tono e velocità ----- */
 const MAX_SEMIS = 3;
@@ -1056,14 +1383,12 @@ function setSemis(v) {
 }
 $("semisDown").addEventListener("click", () => setSemis(S.semis - 1));
 $("semisUp").addEventListener("click", () => setSemis(S.semis + 1));
-$("semisReset").addEventListener("click", () => setSemis(0));
 function setSpeed(pct) {
   S.speed = pct / 100;
   send({ type: "speed", value: S.speed });
   updateUI();
 }
 $("speed").addEventListener("input", e => setSpeed(parseInt(e.target.value, 10)));
-$("speedReset").addEventListener("click", () => { $("speed").value = 100; setSpeed(100); });
 
 function setVolume(pct) {
   S.volume = pct / 100;
@@ -1084,17 +1409,22 @@ window.addEventListener("keydown", e => {
 
 /* ----- interfaccia ----- */
 function updateUI(fields) {
-  setText($("playBtn"), S.playing ? "Pausa" : "Play");
-  setText($("time"), fmt(S.pos) + " / " + fmt(S.T));
-  if (!posDrag) posEl.value = S.pos.toFixed(2);
-  setText($("semisLabel"), (S.semis > 0 ? "+" : "") + S.semis + (Math.abs(S.semis) === 1 ? " semitono" : " semitoni"));
+  $("playBtn").classList.toggle("playing", S.playing);     // cambia l'icona senza riscrivere il bottone (Safari)
+  setAttr($("playBtn"), "title", S.playing ? "Pausa" : "Play"); setAttr($("playBtn"), "aria-label", S.playing ? "Pausa" : "Play");
+  setText($("time"), fmtS(shownPos()) + " / " + fmtS(S.T));
+  draw();
+  setText($("semisLabel"), S.semis > 0 ? "+" + S.semis : S.semis < 0 ? "−" + (-S.semis) : "0");
   setText($("speedLabel"), Math.round(S.speed * 100) + "%");
   setText($("volumeLabel"), Math.round(S.volume * 100) + "%");
   if (S.node) { $("semisDown").disabled = S.semis <= -MAX_SEMIS; $("semisUp").disabled = S.semis >= MAX_SEMIS; }
   if (fields) {
-    $("loopStart").value = fmt(S.ls); $("loopEnd").value = fmt(S.le); $("loopOn").checked = S.loopOn;
+    setText($("loopStart"), fmtR(S.ls)); setText($("loopEnd"), fmtR(S.le));
+    setAttr($("loopOn"), "title", S.loopOn ? "Loop attivo" : "Loop spento");
+    $("loopOn").setAttribute("aria-pressed", String(S.loopOn));
   }
 }
+applyExt();
+
 </script>
 </body>
 </html>
